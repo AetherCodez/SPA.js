@@ -4,10 +4,7 @@
   </a>
 </p>
 
-<br>
-
 <p align="center">
-  <strong>Welcome to SPA.js</strong><br><br>
   Transform any website into a Single Page Application with seamless navigation, URL synchronization, and modern web app behavior.
 </p>
 
