@@ -135,7 +135,7 @@
         const originalPushState = history.pushState;
         const originalReplaceState = history.replaceState;
 
-        history.pushState = function (...args) {
+        history.pushState = function(...args) {
             const result = originalPushState.apply(this, args);
 
             queueMicrotask(() => {
@@ -145,7 +145,7 @@
             return result;
         };
 
-        history.replaceState = function (...args) {
+        history.replaceState = function(...args) {
             const result = originalReplaceState.apply(this, args);
 
             queueMicrotask(() => {
@@ -282,7 +282,11 @@
                  * Just perform a normal browser navigation.
                  */
                 if (newURL.origin !== currentURL.origin) {
-                    window.location.href = newURL.href;
+                    // Prevent the iframe's navigation from causing a second
+                    // synchronization cycle while the parent takes over.
+                    iframe.src = "about:blank";
+
+                    window.location.replace(newURL.href);
                     return;
                 }
 
@@ -357,8 +361,9 @@
         if (document.readyState === "loading") {
             document.addEventListener(
                 "DOMContentLoaded",
-                mountIframe,
-                { once: true }
+                mountIframe, {
+                    once: true
+                }
             );
         } else {
             mountIframe();
