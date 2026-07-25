@@ -35,9 +35,10 @@
         let lastURL = window.location.href;
         let lastFavicon = getFavicon();
 
-        function sendPageState() {
+        function sendPageState(action = "replace") {
             const state = {
                 type: MESSAGE_TYPE,
+                action,
                 title: document.title,
                 url: window.location.href,
                 favicon: getFavicon()
@@ -139,7 +140,7 @@
             const result = originalPushState.apply(this, args);
 
             queueMicrotask(() => {
-                sendPageState();
+                sendPageState("push");
             });
 
             return result;
@@ -149,7 +150,7 @@
             const result = originalReplaceState.apply(this, args);
 
             queueMicrotask(() => {
-                sendPageState();
+                sendPageState("replace");
             });
 
             return result;
@@ -157,6 +158,19 @@
 
         window.addEventListener("popstate", sendPageState);
         window.addEventListener("hashchange", sendPageState);
+
+        /*
+         * Handle Back/Forward navigation from the parent.
+         */
+        window.addEventListener("message", event => {
+            if (
+                event.data?.type === MESSAGE_TYPE &&
+                event.data.navigate &&
+                event.data.navigate !== window.location.href
+            ) {
+                window.location.href = event.data.navigate;
+            }
+        });
 
         /*
          * Some frameworks modify the URL in unusual ways.
@@ -268,7 +282,7 @@
             }
         }
 
-        function syncURL(url) {
+        function syncURL(url, action = "replace") {
             try {
                 const newURL = new URL(url);
                 const currentURL = new URL(window.location.href);
@@ -306,7 +320,13 @@
                     newURL.search +
                     newURL.hash;
 
-                if (currentPath !== newPath) {
+                if (action === "push") {
+                    history.pushState(
+                        history.state,
+                        "",
+                        newPath
+                    );
+                } else {
                     history.replaceState(
                         history.state,
                         "",
@@ -351,8 +371,22 @@
             }
 
             if (data.url) {
-                syncURL(data.url);
+                syncURL(data.url, data.action);
             }
+        });
+
+        /*
+         * Handle browser Back/Forward navigation.
+         *
+         * When the parent URL changes through the browser's
+         * Back or Forward buttons, tell the iframe to navigate
+         * to the same URL.
+         */
+        window.addEventListener("popstate", () => {
+            iframe.contentWindow.postMessage({
+                type: MESSAGE_TYPE,
+                navigate: window.location.href
+            }, "*");
         });
 
         /*
