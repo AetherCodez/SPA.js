@@ -59,7 +59,7 @@ curl -O https://raw.githubusercontent.com/AetherCodez/SPA.js/main/spa.min.js
 
 ### Usage
 
-Add one line to any webpage:
+Add one line to any webpage (required on all pages):
 
 ```html
 <!DOCTYPE html>
