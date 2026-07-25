@@ -1,17 +1,6 @@
 (() => {
     "use strict";
 
-    /*
-     * Single-CDN SPA Wrapper
-     *
-     * The script:
-     * - Turns the top-level page into a full-page iframe
-     * - Does NOT iframe itself again
-     * - Syncs title, favicon, and URL
-     * - Redirects if navigation crosses origins
-     * - Does not proxy or modify network requests
-     */
-
     const MESSAGE_TYPE = "CDN_SPA_PAGE_STATE";
     const IFRAME_MARKER = "__cdn_spa_iframe";
 
@@ -228,15 +217,16 @@ function initializeHost() {
          * The iframe loads a fresh copy of the original URL.
          */
     function mountIframe() {
-        document.documentElement.innerHTML = "";
+        const html = document.documentElement;
 
-        document.documentElement.style.margin = "0";
-        document.documentElement.style.padding = "0";
-        document.documentElement.style.width = "100%";
-        document.documentElement.style.height = "100%";
-        document.documentElement.style.overflow = "hidden";
+    // Remove the original page content without destroying <head>.
+        document.body.innerHTML = "";
 
-        document.body = document.createElement("body");
+        html.style.margin = "0";
+        html.style.padding = "0";
+        html.style.width = "100%";
+        html.style.height = "100%";
+        html.style.overflow = "hidden";
 
         document.body.style.margin = "0";
         document.body.style.padding = "0";
@@ -251,7 +241,6 @@ function initializeHost() {
          * Store whether the favicon was explicitly changed
          * by the SPA wrapper.
          */
-    let wrapperChangedFavicon = false;
 
     function setFavicon(url) {
         if (!url) {
@@ -272,7 +261,6 @@ function initializeHost() {
 
         if (favicon.href !== url) {
             favicon.href = url;
-            wrapperChangedFavicon = true;
         }
     }
 
