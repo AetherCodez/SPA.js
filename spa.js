@@ -82,77 +82,107 @@
             const htmlBackground =
             getComputedStyle(document.documentElement).backgroundColor;
 
-    /*
-     * Prefer the body's visible background.
-     * If it is transparent, use the document background.
-     */
+            /*
+             * Prefer the body's visible background.
+             * If it is transparent, use the document background.
+             */
             if (
                 bodyBackground &&
                 bodyBackground !== "rgba(0, 0, 0, 0)" &&
                 bodyBackground !== "transparent"
                 ) {
                 return bodyBackground;
+            }
+
+            return htmlBackground || "transparent";
         }
 
-        return htmlBackground || "transparent";
-    }
+        function checkForChanges() {
+            const currentTitle = document.title;
+            const currentURL = window.location.href;
+            const currentFavicon = getFavicon();
+            const currentBackground = getBackgroundColor();
 
-    function checkForChanges() {
-        const currentTitle = document.title;
-        const currentURL = window.location.href;
-        const currentFavicon = getFavicon();
-        const currentBackground = getBackgroundColor();
+            if (
+                currentTitle !== lastTitle ||
+                currentURL !== lastURL ||
+                currentFavicon !== lastFavicon ||
+                currentBackground !== lastBackground
+                ) {
+                sendPageState();
+            }
+        }
 
-        if (
-            currentTitle !== lastTitle ||
-            currentURL !== lastURL ||
-            currentFavicon !== lastFavicon ||
-            currentBackground !== lastBackground
-            ) {
-            sendPageState();
-    }
-}
+        /*
+         * Given a candidate URL, decide whether it crosses origins.
+         * Returns the resolved absolute URL, or null if it's invalid.
+         */
+        function resolveCrossOrigin(rawURL) {
+            try {
+                const currentURL = new URL(window.location.href);
+                const targetURL = new URL(rawURL, currentURL.href);
+
+                if (targetURL.origin !== currentURL.origin) {
+                    return targetURL;
+                }
+            } catch {
+                // Ignore invalid URLs.
+            }
+
+            return null;
+        }
+
+        function notifyParentOfExternalNavigation(targetURL) {
+            try {
+                window.parent.postMessage({
+                    type: MESSAGE_TYPE,
+                    navigate: targetURL.href
+                }, "*");
+            } catch {
+                // Ignore.
+            }
+        }
 
         /*
          * Initial state.
          */
-sendPageState();
+        sendPageState();
 
         /*
          * Detect title changes.
          */
-const titleObserver = new MutationObserver(() => {
-    checkForChanges();
-});
+        const titleObserver = new MutationObserver(() => {
+            checkForChanges();
+        });
 
-const titleElement = document.querySelector("title");
+        const titleElement = document.querySelector("title");
 
-if (titleElement) {
-    titleObserver.observe(titleElement, {
-        childList: true,
-        characterData: true,
-        subtree: true
-    });
-}
+        if (titleElement) {
+            titleObserver.observe(titleElement, {
+                childList: true,
+                characterData: true,
+                subtree: true
+            });
+        }
 
         /*
          * Detect favicon changes and DOM changes that may create one.
          */
-const headObserver = new MutationObserver(() => {
-    checkForChanges();
-});
+        const headObserver = new MutationObserver(() => {
+            checkForChanges();
+        });
 
-if (document.head) {
-    headObserver.observe(document.head, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: [
-            "href",
-            "rel"
-        ]
-    });
-}
+        if (document.head) {
+            headObserver.observe(document.head, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: [
+                    "href",
+                    "rel"
+                ]
+            });
+        }
 
         /*
          * Detect URL changes.
@@ -160,106 +190,157 @@ if (document.head) {
          * pushState and replaceState do not emit native events,
          * so we hook them only to notify the parent.
          */
-const originalPushState = history.pushState;
-const originalReplaceState = history.replaceState;
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
 
-history.pushState = function(...args) {
-    const result = originalPushState.apply(this, args);
+        history.pushState = function (...args) {
+            const result = originalPushState.apply(this, args);
 
-    queueMicrotask(() => {
-        sendPageState("push");
-    });
+            queueMicrotask(() => {
+                sendPageState("push");
+            });
 
-    return result;
-};
+            return result;
+        };
 
-history.replaceState = function(...args) {
-    const result = originalReplaceState.apply(this, args);
+        history.replaceState = function (...args) {
+            const result = originalReplaceState.apply(this, args);
 
-    queueMicrotask(() => {
-        sendPageState("replace");
-    });
+            queueMicrotask(() => {
+                sendPageState("replace");
+            });
 
-    return result;
-};
+            return result;
+        };
 
-window.addEventListener("popstate", sendPageState);
-window.addEventListener("hashchange", sendPageState);
+        window.addEventListener("popstate", sendPageState);
+        window.addEventListener("hashchange", sendPageState);
 
         /*
          * Handle Back/Forward navigation from the parent.
          */
-window.addEventListener("message", event => {
-    if (
-        event.data?.type === MESSAGE_TYPE &&
-        event.data.navigate &&
-        event.data.navigate !== window.location.href
-        ) {
-        window.location.href = event.data.navigate;
-}
-});
-
-                    /*
-         * Handle navigation before the iframe leaves the page.
-         *
-         * Same-origin navigation:
-         *     Let the iframe navigate normally.
-         *
-         * Cross-origin navigation:
-         *     Stop the iframe navigation and tell the parent
-         *     to navigate the entire browser window instead.
-         */
-if ("navigation" in window) {
-    navigation.addEventListener("navigate", event => {
-        const destination = event.destination?.url;
-
-        if (!destination) {
-            return;
-        }
-
-        try {
-            const currentURL = new URL(window.location.href);
-            const destinationURL = new URL(destination);
-
+        window.addEventListener("message", event => {
             if (
-                destinationURL.origin !== currentURL.origin
+                event.data?.type === MESSAGE_TYPE &&
+                event.data.navigate &&
+                event.data.navigate !== window.location.href
                 ) {
-                event.preventDefault();
+                window.location.href = event.data.navigate;
+            }
+        });
 
-            window.parent.postMessage({
-                type: MESSAGE_TYPE,
-                navigate: destinationURL.href
-            }, "*");
+        /*
+         * ---- Layer 1: intercept intent as early as possible ----
+         *
+         * Catch clicks on links and form submissions in the capture
+         * phase, BEFORE the browser sends the request. This covers
+         * every browser (not just ones with the Navigation API) and
+         * catches the common case: a link/form whose target is
+         * directly on another origin.
+         *
+         * NOTE: this cannot see through a same-origin URL that the
+         * server later 302s to a different origin - that case is
+         * handled by Layer 3 below, on the host side.
+         */
+        document.addEventListener("click", event => {
+            if (event.defaultPrevented || event.button !== 0) {
+                return;
+            }
+
+            const anchor = event.target?.closest?.("a[href]");
+
+            if (!anchor) {
+                return;
+            }
+
+            // Respect explicit new-tab/modifier-click intent.
+            if (
+                anchor.target === "_blank" ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+                ) {
+                return;
+            }
+
+            const targetURL = resolveCrossOrigin(anchor.getAttribute("href"));
+
+            if (targetURL) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                notifyParentOfExternalNavigation(targetURL);
+            }
+        }, true);
+
+        document.addEventListener("submit", event => {
+            if (event.defaultPrevented) {
+                return;
+            }
+
+            const form = event.target;
+
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+
+            const action = form.getAttribute("action") || window.location.href;
+            const targetURL = resolveCrossOrigin(action);
+
+            if (targetURL) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                notifyParentOfExternalNavigation(targetURL);
+            }
+        }, true);
+
+        /*
+         * ---- Layer 2: Navigation API, where available ----
+         *
+         * Belt-and-suspenders for programmatic navigations
+         * (location.href = ..., location.assign(), etc.) that
+         * don't go through a click or submit event.
+         */
+        if ("navigation" in window) {
+            navigation.addEventListener("navigate", event => {
+                const destination = event.destination?.url;
+
+                if (!destination) {
+                    return;
+                }
+
+                const targetURL = resolveCrossOrigin(destination);
+
+                if (targetURL) {
+                    event.preventDefault();
+                    notifyParentOfExternalNavigation(targetURL);
+                }
+            });
         }
-    } catch {
-                    // Ignore invalid navigation URLs.
-    }
-});
-}
 
         /*
          * Some frameworks modify the URL in unusual ways.
          * This lightweight fallback catches those without
          * touching network requests.
          */
-setInterval(checkForChanges, 500);
+        setInterval(checkForChanges, 500);
 
         /*
          * Tell the parent that the iframe is ready.
          */
-try {
-    window.parent.postMessage({
-        type: MESSAGE_TYPE,
-        ready: true,
-        title: document.title,
-        url: window.location.href,
-        favicon: getFavicon(),
-        background: getBackgroundColor()
-    }, "*");
-} catch {
+        try {
+            window.parent.postMessage({
+                type: MESSAGE_TYPE,
+                ready: true,
+                title: document.title,
+                url: window.location.href,
+                favicon: getFavicon(),
+                background: getBackgroundColor()
+            }, "*");
+        } catch {
             // Ignore.
-}
-}
+        }
+    }
 
     /*
      * ============================================
@@ -267,25 +348,30 @@ try {
      * ============================================
      */
 
-function initializeHost() {
-    const originalURL = window.location.href;
+    function initializeHost() {
+        const originalURL = window.location.href;
 
-    const iframe = document.createElement("iframe");
+        const iframe = document.createElement("iframe");
 
-    iframe.setAttribute(IFRAME_MARKER, "true");
+        iframe.setAttribute(IFRAME_MARKER, "true");
 
-    iframe.src = originalURL;
+        iframe.src = originalURL;
 
-    iframe.style.position = "fixed";
-    iframe.style.inset = "0";
-    iframe.style.width = "100vw";
-    iframe.style.height = "100vh";
-    iframe.style.border = "0";
-    iframe.style.margin = "0";
-    iframe.style.padding = "0";
-    iframe.style.display = "block";
-    iframe.style.background = "white";
-    iframe.style.zIndex = "2147483647";
+        iframe.style.position = "fixed";
+        iframe.style.inset = "0";
+        iframe.style.width = "100vw";
+        iframe.style.height = "100vh";
+        iframe.style.border = "0";
+        iframe.style.margin = "0";
+        iframe.style.padding = "0";
+        iframe.style.display = "block";
+        iframe.style.background = "white";
+        iframe.style.zIndex = "2147483647";
+
+        // Tracks the last URL we know the iframe legitimately holds,
+        // so Layer 3 (below) can bounce back to it if we detect an
+        // uncontrolled cross-origin escape (e.g. a server-side redirect).
+        let lastKnownGoodURL = originalURL;
 
         /*
          * Remove all visible original page content.
@@ -293,74 +379,69 @@ function initializeHost() {
          * This happens only to the outer host document.
          * The iframe loads a fresh copy of the original URL.
          */
-    function mountIframe() {
-        const html = document.documentElement;
+        function mountIframe() {
+            const html = document.documentElement;
 
-    // Remove the original page content without destroying <head>.
-        document.body.innerHTML = "";
+            // Remove the original page content without destroying <head>.
+            document.body.innerHTML = "";
 
-        html.style.margin = "0";
-        html.style.padding = "0";
-        html.style.width = "100%";
-        html.style.height = "100%";
-        html.style.overflow = "hidden";
+            html.style.margin = "0";
+            html.style.padding = "0";
+            html.style.width = "100%";
+            html.style.height = "100%";
+            html.style.overflow = "hidden";
 
-        document.body.style.margin = "0";
-        document.body.style.padding = "0";
-        document.body.style.width = "100%";
-        document.body.style.height = "100%";
-        document.body.style.overflow = "hidden";
+            document.body.style.margin = "0";
+            document.body.style.padding = "0";
+            document.body.style.width = "100%";
+            document.body.style.height = "100%";
+            document.body.style.overflow = "hidden";
 
-        document.body.appendChild(iframe);
-    }
-
-    function setBackground(color) {
-        if (!color) {
-            return;
+            document.body.appendChild(iframe);
         }
 
-        document.documentElement.style.backgroundColor = color;
-        document.body.style.backgroundColor = color;
-        iframe.style.backgroundColor = color;
-    }
+        function setBackground(color) {
+            if (!color) {
+                return;
+            }
 
-        /*
-         * Store whether the favicon was explicitly changed
-         * by the SPA wrapper.
-         */
-
-    function setFavicon(url) {
-        if (!url) {
-            return;
+            document.documentElement.style.backgroundColor = color;
+            document.body.style.backgroundColor = color;
+            iframe.style.backgroundColor = color;
         }
 
-        let favicon =
-        document.querySelector('link[data-cdn-spa-favicon="true"]');
+        function setFavicon(url) {
+            if (!url) {
+                return;
+            }
 
-        if (!favicon) {
-            favicon = document.createElement("link");
+            let favicon =
+            document.querySelector('link[data-cdn-spa-favicon="true"]');
 
-            favicon.rel = "icon";
-            favicon.dataset.cdnSpaFavicon = "true";
+            if (!favicon) {
+                favicon = document.createElement("link");
 
-            document.head.appendChild(favicon);
+                favicon.rel = "icon";
+                favicon.dataset.cdnSpaFavicon = "true";
+
+                document.head.appendChild(favicon);
+            }
+
+            if (favicon.href !== url) {
+                favicon.href = url;
+            }
         }
 
-        if (favicon.href !== url) {
-            favicon.href = url;
+        function setTitle(title) {
+            if (typeof title === "string") {
+                document.title = title;
+            }
         }
-    }
 
-    function setTitle(title) {
-        if (typeof title === "string") {
-            document.title = title;
-        }
-    }
-
-    function syncURL(url, action = "replace") {
-        try {
-            const newURL = new URL(url);
-            const currentURL = new URL(window.location.href);
+        function syncURL(url, action = "replace") {
+            try {
+                const newURL = new URL(url);
+                const currentURL = new URL(window.location.href);
 
                 /*
                  * CRITICAL:
@@ -370,12 +451,12 @@ function initializeHost() {
                  *
                  * Just perform a normal browser navigation.
                  */
-            if (newURL.origin !== currentURL.origin) {
-                iframe.style.visibility = "hidden";
+                if (newURL.origin !== currentURL.origin) {
+                    iframe.style.visibility = "hidden";
 
-                window.location.replace(newURL.href);
-                return;
-            }
+                    window.location.replace(newURL.href);
+                    return;
+                }
 
                 /*
                  * Same-origin URL:
@@ -383,79 +464,106 @@ function initializeHost() {
                  * Update the outer browser URL without
                  * actually navigating the host page.
                  */
-            const currentPath =
-            currentURL.pathname +
-            currentURL.search +
-            currentURL.hash;
+                const newPath =
+                newURL.pathname +
+                newURL.search +
+                newURL.hash;
 
-            const newPath =
-            newURL.pathname +
-            newURL.search +
-            newURL.hash;
+                if (action === "push") {
+                    history.pushState(
+                        history.state,
+                        "",
+                        newPath
+                        );
+                } else {
+                    history.replaceState(
+                        history.state,
+                        "",
+                        newPath
+                        );
+                }
 
-            if (action === "push") {
-                history.pushState(
-                    history.state,
-                    "",
-                    newPath
-                    );
-            } else {
-                history.replaceState(
-                    history.state,
-                    "",
-                    newPath
-                    );
-            }
-        } catch {
+                lastKnownGoodURL = newURL.href;
+            } catch {
                 // Ignore invalid URLs.
+            }
         }
-    }
 
         /*
          * Receive state from the iframe.
          */
-    window.addEventListener("message", event => {
-        const data = event.data;
+        window.addEventListener("message", event => {
+            const data = event.data;
 
-        if (!data || data.type !== MESSAGE_TYPE) {
-            return;
-        }
+            if (!data || data.type !== MESSAGE_TYPE) {
+                return;
+            }
 
             /*
              * Only accept messages from our actual iframe.
              */
-        if (event.source !== iframe.contentWindow) {
-            return;
-        }
+            if (event.source !== iframe.contentWindow) {
+                return;
+            }
 
-        if (data.navigate) {
-            window.location.replace(data.navigate);
-            return;
-        }
+            if (data.navigate) {
+                window.location.replace(data.navigate);
+                return;
+            }
 
-        if (typeof data.title === "string") {
-            setTitle(data.title);
-        }
+            if (typeof data.title === "string") {
+                setTitle(data.title);
+            }
 
-            /*
-             * Only update the favicon if the iframe
-             * explicitly provides one.
-             *
-             * If it has no favicon, the wrapper leaves
-             * the host favicon alone.
-             */
-        if (data.favicon) {
-            setFavicon(data.favicon);
-        }
+            if (data.favicon) {
+                setFavicon(data.favicon);
+            }
 
-        if (data.background) {
-            setBackground(data.background);
-        }
+            if (data.background) {
+                setBackground(data.background);
+            }
 
-        if (data.url) {
-            syncURL(data.url, data.action);
-        }
-    });
+            if (data.url) {
+                syncURL(data.url, data.action);
+            }
+        });
+
+        /*
+         * ---- Layer 3: catch anything that still slipped through ----
+         *
+         * If a same-origin link 302s to another origin at the HTTP
+         * level, our in-page script never runs on the destination
+         * (it's a different site), so no message ever arrives. The
+         * iframe's "load" event still fires, though - even for
+         * cross-origin loads. We use that as a trip wire: if we can
+         * no longer read the iframe's location after a load, an
+         * unauthorized cross-origin page is sitting in our iframe.
+         *
+         * We can't recover the URL it landed on (cross-origin read
+         * access is blocked by design), but writing to a cross-origin
+         * window's location IS allowed (the same mechanism behind
+         * frame-busting), so we immediately steer it back rather than
+         * let an external, unbranded page sit under our chrome.
+         */
+        iframe.addEventListener("load", () => {
+            let sameOrigin = true;
+
+            try {
+                // Any property read throws if this is cross-origin.
+                void iframe.contentWindow.location.href;
+            } catch {
+                sameOrigin = false;
+            }
+
+            if (!sameOrigin) {
+                try {
+                    iframe.contentWindow.location.replace(lastKnownGoodURL);
+                } catch {
+                    // As an absolute last resort, reload the host itself.
+                    window.location.reload();
+                }
+            }
+        });
 
         /*
          * Handle browser Back/Forward navigation.
@@ -464,25 +572,25 @@ function initializeHost() {
          * Back or Forward buttons, tell the iframe to navigate
          * to the same URL.
          */
-    window.addEventListener("popstate", () => {
-        iframe.contentWindow.postMessage({
-            type: MESSAGE_TYPE,
-            navigate: window.location.href
-        }, "*");
-    });
+        window.addEventListener("popstate", () => {
+            iframe.contentWindow.postMessage({
+                type: MESSAGE_TYPE,
+                navigate: window.location.href
+            }, "*");
+        });
 
         /*
          * Mount after the script has initialized.
          */
-    if (document.readyState === "loading") {
-        document.addEventListener(
-            "DOMContentLoaded",
-            mountIframe, {
-                once: true
-            }
-            );
-    } else {
-        mountIframe();
+        if (document.readyState === "loading") {
+            document.addEventListener(
+                "DOMContentLoaded",
+                mountIframe, {
+                    once: true
+                }
+                );
+        } else {
+            mountIframe();
+        }
     }
-}
 })();
