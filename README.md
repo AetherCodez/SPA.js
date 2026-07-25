@@ -122,27 +122,6 @@ The result? Users experience seamless navigation while maintaining all the benef
 
 Requires modern browsers with `postMessage` and the History API.
 
-## Configuration
-
-SPA.js works automatically, but you can listen for navigation events:
-
-```javascript
-window.addEventListener('message', (e) => {
-    if (e.data.type === 'spa-nav') {
-        console.log('User navigated to:', e.data.url);
-        // Analytics, custom handling, etc.
-    }
-});
-```
-
-### Available Events
-
-* `spa-nav` - User navigated to a new page
-* `spa-external` - An external link was clicked
-* `spa-title` - The page title changed
-* `spa-favicon` - The page favicon changed
-* `spa-bgcolor` - The page background color changed
-
 ## Security
 
 SPA.js uses iframe sandboxing with minimal required permissions:
