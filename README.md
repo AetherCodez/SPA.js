@@ -29,7 +29,6 @@ SPA.js creates a seamless single-page experience by:
 
 * **Eliminating page refreshes** - Navigation happens instantly
 * **Maintaining browser history** - Back/forward buttons work perfectly
-* **Preserving scroll state** - Users never lose their place
 * **Synchronizing everything** - URLs, titles, favicons stay in perfect sync
 * **Zero configuration** - Works with any existing website
 
@@ -38,7 +37,6 @@ SPA.js creates a seamless single-page experience by:
 * **Instant Navigation** - No more page refreshes or loading states
 * **Perfect URL Sync** - Browser address bar stays current with content
 * **Browser History** - Back/forward buttons work as expected
-* **Scroll Preservation** - Smooth transitions without position loss
 * **Title & Favicon Updates** - Full metadata synchronization
 * **External Link Handling** - Smart detection and proper redirects
 * **Zero Dependencies** - Pure vanilla JavaScript
