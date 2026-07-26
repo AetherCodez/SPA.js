@@ -31,6 +31,21 @@
      */
 
     function initializeIframe() {
+        if (!document.body) {
+            const bodyWaiter = new MutationObserver(() => {
+                if (document.body) {
+                    bodyWaiter.disconnect();
+                    initializeIframe();
+                }
+            });
+
+            bodyWaiter.observe(document.documentElement, {
+                childList: true
+            });
+
+            return;
+        }
+
         let lastTitle = document.title;
         let lastURL = window.location.href;
         let lastFavicon = getFavicon();
