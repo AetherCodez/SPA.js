@@ -40,21 +40,21 @@ SPA.js creates a seamless single-page experience by:
 * **Title & Favicon Updates** - Full metadata synchronization
 * **External Link Handling** - Smart detection and proper redirects
 * **Zero Dependencies** - Pure vanilla JavaScript
-* **Tiny Footprint** - Only ~2KB minified
+* **Tiny Footprint** - Only ~2KB
 
 ## Quick Start
 
 ### CDN
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/AetherCodez/SPA.js/spa.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AetherCodez/SPA.js/spa.js"></script>
 ```
 
 ### Local Installation
 
 ```bash
 # Download to your project
-curl -O https://raw.githubusercontent.com/AetherCodez/SPA.js/main/spa.min.js
+curl -O https://raw.githubusercontent.com/AetherCodez/SPA.js/main/spa.js
 ```
 
 ### Usage
@@ -70,7 +70,7 @@ Add one line to any webpage (required on all pages):
 <body>
     <!-- Your existing content -->
 
-    <script src="spa.min.js"></script>
+    <script src="spa.js"></script>
 </body>
 </html>
 ```
@@ -133,10 +133,9 @@ External links are automatically detected and safely redirected.
 
 ## Understanding the Code
 
-Want to see how the magic works? Check out the **non-minified version**:
+Want to see how the magic works? Check out the **the source code**:
 
 * **[spa.js](https://raw.githubusercontent.com/AetherCodez/SPA.js/main/spa.js)** - Full source code with comments
-* **[spa.min.js](https://raw.githubusercontent.com/AetherCodez/SPA.js/main/spa.min.js)** - Production-ready minified version
 
 The source code is clean, well-commented, and easy to follow if you want to understand the iframe-based SPA transformation technique.
 
@@ -147,7 +146,6 @@ git clone https://github.com/AetherCodez/SPA.js.git
 cd SPA.js
 
 # Source: spa.js (readable)
-# Production: spa.min.js (minified)
 ```
 
 ## Contributing
